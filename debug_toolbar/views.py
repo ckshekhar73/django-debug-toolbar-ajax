@@ -187,3 +187,12 @@ def template_source(request):
         'source': source,
         'template_name': template_name
     })
+
+def ajax(request):
+    """
+    Get the ajax content of the most recently generated toolbar
+    """
+    from django.core.cache import cache
+    from django.http import HttpResponse
+    return HttpResponse(cache.get('toolbar_' + request.session.session_key))
+    

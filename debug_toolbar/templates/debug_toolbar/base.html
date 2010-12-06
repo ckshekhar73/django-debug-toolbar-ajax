@@ -4,8 +4,17 @@
 // <![CDATA[
 var DEBUG_TOOLBAR_MEDIA_URL = "{{ DEBUG_TOOLBAR_MEDIA_URL }}";
 // ]]>
+
+if (typeof djdt == "undefined")
+{
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src = DEBUG_TOOLBAR_MEDIA_URL + "js/toolbar.js";
+    document.documentElement.childNodes[0].appendChild(script)
+}       
 </script>
-<script type="text/javascript" src="{{ DEBUG_TOOLBAR_MEDIA_URL }}js/toolbar.min.js"></script>
+
+
 <div id="djDebug" style="display:none;">
 	<div style="display:none;" id="djDebugToolbar">
 		<ul id="djDebugPanelList">

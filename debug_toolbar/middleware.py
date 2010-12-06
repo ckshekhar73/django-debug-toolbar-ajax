@@ -8,6 +8,8 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import render_to_response
 from django.utils.encoding import smart_unicode
 from django.conf.urls.defaults import include, patterns
+from django.core.cache import cache
+
 
 import debug_toolbar.urls
 from debug_toolbar.toolbar.loader import DebugToolbar
@@ -32,6 +34,7 @@ class DebugToolbarMiddleware(object):
     on outgoing response.
     """
     def __init__(self):
+        
         self.debug_toolbars = {}
         self.override_url = True
 
@@ -57,22 +60,23 @@ class DebugToolbarMiddleware(object):
             remote_addr = x_forwarded_for.split(',')[0].strip()
         else:
             remote_addr = request.META.get('REMOTE_ADDR', None)
-        if not remote_addr in settings.INTERNAL_IPS \
-            or (request.is_ajax() and \
-                not debug_toolbar.urls._PREFIX in request.path) \
-                    or not settings.DEBUG:
-            return False
+        
+        if remote_addr not in settings.INTERNAL_IPS: return False
+        if debug_toolbar.urls._PREFIX in request.path: return False
+        print 'toolbar!'
         return True
 
     def process_request(self, request):
+        if self.override_url:
+            original_urlconf = getattr(request, 'urlconf', settings.ROOT_URLCONF)
+            debug_toolbar.urls.urlpatterns += patterns('',
+                ('', include(original_urlconf)),
+            )
+            self.override_url = False
+            
+        request.urlconf = 'debug_toolbar.urls'
         if self.show_toolbar(request):
-            if self.override_url:
-                original_urlconf = getattr(request, 'urlconf', settings.ROOT_URLCONF)
-                debug_toolbar.urls.urlpatterns += patterns('',
-                    ('', include(original_urlconf)),
-                )
-                self.override_url = False
-            request.urlconf = 'debug_toolbar.urls'
+            print request.urlconf
 
             self.debug_toolbars[request] = DebugToolbar(request)
             for panel in self.debug_toolbars[request].panels:
@@ -84,6 +88,7 @@ class DebugToolbarMiddleware(object):
                 panel.process_view(request, view_func, view_args, view_kwargs)
 
     def process_response(self, request, response):
+        print self.debug_toolbars
         if request not in self.debug_toolbars:
             return response
         if self.debug_toolbars[request].config['INTERCEPT_REDIRECTS']:
@@ -100,11 +105,17 @@ class DebugToolbarMiddleware(object):
             for panel in self.debug_toolbars[request].panels:
                 panel.process_response(request, response)
             if response['Content-Type'].split(';')[0] in _HTML_TYPES:
+                original_len = len(response.content)
+                rendered = self.debug_toolbars[request].render_toolbar()
                 response.content = replace_insensitive(
                     smart_unicode(response.content), 
                     self.tag,
-                    smart_unicode(self.debug_toolbars[request].render_toolbar() + self.tag))
+                    smart_unicode(rendered + self.tag))
+                from django.core.cache import cache
+                cache.set('toolbar_' + request.session.session_key, rendered)
+                
+                    #if 'last_toolbar' in request.session: del request.session['last_toolbar']
             if response.get('Content-Length', None):
                 response['Content-Length'] = len(response.content)
-        del self.debug_toolbars[request]
+        
         return response
