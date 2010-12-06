@@ -14,8 +14,6 @@ from django.core.cache import cache
 import debug_toolbar.urls
 from debug_toolbar.toolbar.loader import DebugToolbar
 
-_HTML_TYPES = ('text/html', 'application/xhtml+xml')
-
 def replace_insensitive(string, target, replacement):
     """
     Similar to string.replace() but is case insensitive
@@ -61,9 +59,8 @@ class DebugToolbarMiddleware(object):
         else:
             remote_addr = request.META.get('REMOTE_ADDR', None)
         
-        if remote_addr not in settings.INTERNAL_IPS: return False
+        if remote_addr not in settings.INTERNAL_IPS or not settings.DEBUG: return False
         if debug_toolbar.urls._PREFIX in request.path: return False
-        print 'toolbar!'
         return True
 
     def process_request(self, request):
@@ -76,8 +73,6 @@ class DebugToolbarMiddleware(object):
             
         request.urlconf = 'debug_toolbar.urls'
         if self.show_toolbar(request):
-            print request.urlconf
-
             self.debug_toolbars[request] = DebugToolbar(request)
             for panel in self.debug_toolbars[request].panels:
                 panel.process_request(request)
@@ -88,7 +83,6 @@ class DebugToolbarMiddleware(object):
                 panel.process_view(request, view_func, view_args, view_kwargs)
 
     def process_response(self, request, response):
-        print self.debug_toolbars
         if request not in self.debug_toolbars:
             return response
         if self.debug_toolbars[request].config['INTERCEPT_REDIRECTS']:
@@ -104,15 +98,15 @@ class DebugToolbarMiddleware(object):
         if response.status_code == 200:
             for panel in self.debug_toolbars[request].panels:
                 panel.process_response(request, response)
-            if response['Content-Type'].split(';')[0] in _HTML_TYPES:
-                original_len = len(response.content)
-                rendered = self.debug_toolbars[request].render_toolbar()
-                response.content = replace_insensitive(
-                    smart_unicode(response.content), 
-                    self.tag,
-                    smart_unicode(rendered + self.tag))
-                from django.core.cache import cache
-                cache.set('toolbar_' + request.session.session_key, rendered)
+
+               
+            rendered = self.debug_toolbars[request].render_toolbar()
+            response.content = replace_insensitive(
+                smart_unicode(response.content), 
+                self.tag,
+                smart_unicode(rendered + self.tag))
+            from django.core.cache import cache
+            cache.set('toolbar_' + request.session.session_key, rendered)
                 
                     #if 'last_toolbar' in request.session: del request.session['last_toolbar']
             if response.get('Content-Length', None):
